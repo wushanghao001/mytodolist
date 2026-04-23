@@ -21,16 +21,18 @@ function App() {
   });
   const [inputValue, setInputValue] = useState('');
   const [priority, setPriority] = useState<'high' | 'medium' | 'low'>('medium');
-  const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [editingTodo, setEditingTodo] = useState<Todo | null>(null);
   const [editText, setEditText] = useState('');
   const [editPriority, setEditPriority] = useState<'high' | 'medium' | 'low'>('medium');
   const [editTags, setEditTags] = useState<string[]>([]);
-  const [editTagInput, setEditTagInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  // Temporary states for search modal
+  const [tempSearchTerm, setTempSearchTerm] = useState('');
+  const [tempSelectedTag, setTempSelectedTag] = useState<string | null>(null);
+  const [tempStatusFilter, setTempStatusFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [selectedTodos, setSelectedTodos] = useState<string[]>([]);
   const [showSearchModal, setShowSearchModal] = useState(false);
 
@@ -41,14 +43,6 @@ function App() {
   useEffect(() => {
     localStorage.setItem('allTags', JSON.stringify(allTags));
   }, [allTags]);
-
-  const addTag = () => {
-    const tag = tagInput.trim();
-    if (tag && !allTags.includes(tag)) {
-      setAllTags([...allTags, tag]);
-      setTagInput('');
-    }
-  };
 
   const toggleTag = (tag: string) => {
     setTags(prev =>
@@ -63,7 +57,6 @@ function App() {
     setEditText(todo.text);
     setEditPriority(todo.priority);
     setEditTags([...todo.tags]);
-    setEditTagInput('');
   };
 
   const saveEdit = () => {
@@ -88,13 +81,7 @@ function App() {
     setEditingTodo(null);
   };
 
-  const addEditTag = () => {
-    const tag = editTagInput.trim();
-    if (tag && !allTags.includes(tag)) {
-      setAllTags([...allTags, tag]);
-      setEditTagInput('');
-    }
-  };
+
 
   const addTodo = () => {
     const text = inputValue.trim();
@@ -113,7 +100,6 @@ function App() {
     setInputValue('');
     setPriority('medium');
     setTags([]);
-    setTagInput('');
   };
 
   const toggleTodo = (id: string) => {
@@ -134,9 +120,6 @@ function App() {
     }
   };
 
-  const completedCount = todos.filter((t) => t.completed).length;
-  const pendingCount = todos.length - completedCount;
-
   // Filter todos based on search term, selected tag, and status
   const filteredTodos = todos.filter(todo => {
     const matchesSearch = searchTerm === '' || todo.text.toLowerCase().includes(searchTerm.toLowerCase());
@@ -146,6 +129,10 @@ function App() {
       (statusFilter === 'completed' && todo.completed);
     return matchesSearch && matchesTag && matchesStatus;
   });
+
+  // Calculate counts based on filtered todos
+  const completedCount = filteredTodos.filter((t) => t.completed).length;
+  const pendingCount = filteredTodos.length - completedCount;
 
   const clearCompleted = () => {
     setTodos(todos.filter((t) => !t.completed));
@@ -219,6 +206,7 @@ function App() {
             <Sparkles className="text-purple-500" size={32} />
           </div>
           <p className="text-gray-500">记录你的每一个重要任务</p>
+          <p className="text-gray-400 text-sm mt-2">{new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}</p>
         </div>
 
 
@@ -243,7 +231,12 @@ function App() {
                 <span>➕ 添加任务</span>
               </button>
               <button
-                onClick={() => setShowSearchModal(true)}
+                onClick={() => {
+                  setTempSearchTerm(searchTerm);
+                  setTempSelectedTag(selectedTag);
+                  setTempStatusFilter(statusFilter);
+                  setShowSearchModal(true);
+                }}
                 className="px-5 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium transition-all duration-200 hover:shadow-lg hover:shadow-gray-200 active:scale-95 flex items-center gap-2"
               >
                 <span>🔍 搜索</span>
@@ -281,37 +274,47 @@ function App() {
             <span className="text-sm font-medium text-gray-600 flex items-center">标签:</span>
             <div className="flex-1 flex gap-2 flex-wrap">
               {/* All available tags */}
-              {allTags.map((tag) => (
-                <button
-                  key={tag}
-                  onClick={() => toggleTag(tag)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                    tags.includes(tag) ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {tag}
-                </button>
-              ))}
+              {allTags.map((tag) => {
+                // Check if any todo is using this tag
+                const isTagUsed = todos.some(todo => todo.tags.includes(tag));
+                
+                return (
+                  <div key={tag} className="relative group">
+                    <button
+                      onClick={() => toggleTag(tag)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                        tags.includes(tag) ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {tag}
+                    </button>
+                    {!isTagUsed && (
+                      <button
+                        onClick={() => setAllTags(allTags.filter(t => t !== tag))}
+                        className="absolute -top-1 -right-1 w-4 h-4 bg-gray-200 hover:bg-red-200 text-gray-600 hover:text-red-600 rounded-full text-xs flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100"
+                        title="删除标签"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
               
               {/* Add new tag */}
-              <div className="flex gap-2">
-                <div className="flex-1 min-w-[100px]">
-                  <input
-                    type="text"
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && addTag()}
-                    placeholder="添加标签"
-                    className="w-full px-2 py-1 rounded-lg border border-gray-200 focus:border-purple-300 focus:outline-none text-sm"
-                  />
-                </div>
-                <button
-                  onClick={addTag}
-                  className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
-                >
-                  添加
-                </button>
-              </div>
+              <button
+                onClick={() => {
+                  const tag = prompt('请输入新标签名称:');
+                  if (tag && tag.trim() && !allTags.includes(tag.trim())) {
+                    setAllTags([...allTags, tag.trim()]);
+                  }
+                }}
+                className="px-3 py-1 rounded-full text-xs font-medium transition-all bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-700 border border-dashed border-gray-300 hover:border-purple-300 flex items-center gap-1"
+                title="添加标签"
+              >
+                <span>+</span>
+                <span>添加</span>
+              </button>
             </div>
           </div>
         </div>
@@ -325,7 +328,7 @@ function App() {
             >
               <span className="text-gray-500 text-sm">全部</span>
               <span className="ml-2 text-blue-600 font-bold text-lg">
-                {todos.length}
+                {filteredTodos.length}
               </span>
             </button>
             <button
@@ -357,6 +360,72 @@ function App() {
             </button>
           )}
         </div>
+
+        {/* Current Filter Conditions */}
+        {(searchTerm || selectedTag || statusFilter !== 'all') && (
+          <div className="bg-white rounded-2xl shadow-lg shadow-purple-100/50 p-4 mb-6">
+            <div className="flex flex-wrap gap-2 mb-3">
+              {/* Keyword Filter */}
+              {searchTerm && (
+                <div className="bg-purple-50 text-purple-700 rounded-full px-3 py-1 flex items-center gap-2">
+                  <span className="text-xs font-medium">关键词: {searchTerm}</span>
+                  <button
+                    onClick={() => setSearchTerm('')}
+                    className="w-4 h-4 flex items-center justify-center hover:bg-purple-100 rounded-full transition-colors"
+                    title="清除关键词"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              
+              {/* Tag Filter */}
+              {selectedTag && (
+                <div className="bg-purple-50 text-purple-700 rounded-full px-3 py-1 flex items-center gap-2">
+                  <span className="text-xs font-medium">标签: {selectedTag}</span>
+                  <button
+                    onClick={() => setSelectedTag(null)}
+                    className="w-4 h-4 flex items-center justify-center hover:bg-purple-100 rounded-full transition-colors"
+                    title="清除标签"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              
+              {/* Status Filter */}
+              {statusFilter !== 'all' && (
+                <div className="bg-purple-50 text-purple-700 rounded-full px-3 py-1 flex items-center gap-2">
+                  <span className="text-xs font-medium">状态: {statusFilter === 'pending' ? '待完成' : '已完成'}</span>
+                  <button
+                    onClick={() => setStatusFilter('all')}
+                    className="w-4 h-4 flex items-center justify-center hover:bg-purple-100 rounded-full transition-colors"
+                    title="清除状态"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+              
+              {/* Clear All Button */}
+              <button
+                onClick={() => {
+                  setSearchTerm('');
+                  setSelectedTag(null);
+                  setStatusFilter('all');
+                }}
+                className="bg-gray-100 text-gray-600 rounded-full px-3 py-1 text-xs font-medium hover:bg-gray-200 transition-colors"
+              >
+                清除全部筛选
+              </button>
+            </div>
+            
+            {/* Result Info */}
+            <div className="text-sm text-gray-500">
+              共找到 {filteredTodos.length} 个匹配任务（共 {todos.length} 个总任务）
+            </div>
+          </div>
+        )}
 
         {/* Todo List */}
         <div className="space-y-3">
@@ -460,41 +529,51 @@ function App() {
                         <span className="text-sm font-medium text-gray-600 flex items-center">标签:</span>
                         <div className="flex-1 flex gap-2 flex-wrap">
                           {/* All available tags */}
-                          {allTags.map((tag) => (
-                            <button
-                              key={tag}
-                              onClick={() => setEditTags(prev =>
-                                prev.includes(tag)
-                                  ? prev.filter(t => t !== tag)
-                                  : [...prev, tag]
-                              )}
-                              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                                editTags.includes(tag) ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                              }`}
-                            >
-                              {tag}
-                            </button>
-                          ))}
+                          {allTags.map((tag) => {
+                            // Check if any todo is using this tag
+                            const isTagUsed = todos.some(todo => todo.tags.includes(tag));
+                            
+                            return (
+                              <div key={tag} className="relative group">
+                                <button
+                                  onClick={() => setEditTags(prev =>
+                                    prev.includes(tag)
+                                      ? prev.filter(t => t !== tag)
+                                      : [...prev, tag]
+                                  )}
+                                  className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                                    editTags.includes(tag) ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                  }`}
+                                >
+                                  {tag}
+                                </button>
+                                {!isTagUsed && (
+                                  <button
+                                    onClick={() => setAllTags(allTags.filter(t => t !== tag))}
+                                    className="absolute -top-1 -right-1 w-4 h-4 bg-gray-200 hover:bg-red-200 text-gray-600 hover:text-red-600 rounded-full text-xs flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100"
+                                    title="删除标签"
+                                  >
+                                    ×
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
                           
                           {/* Add new tag */}
-                          <div className="flex gap-2">
-                            <div className="flex-1 min-w-[100px]">
-                              <input
-                                type="text"
-                                value={editTagInput}
-                                onChange={(e) => setEditTagInput(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && addEditTag()}
-                                placeholder="添加标签"
-                                className="w-full px-2 py-1 rounded-lg border border-gray-200 focus:border-purple-300 focus:outline-none text-sm"
-                              />
-                            </div>
-                            <button
-                              onClick={addEditTag}
-                              className="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm font-medium transition-colors"
-                            >
-                              添加
-                            </button>
-                          </div>
+                          <button
+                            onClick={() => {
+                              const tag = prompt('请输入新标签名称:');
+                              if (tag && tag.trim() && !allTags.includes(tag.trim())) {
+                                setAllTags([...allTags, tag.trim()]);
+                              }
+                            }}
+                            className="px-3 py-1 rounded-full text-xs font-medium transition-all bg-gray-100 text-gray-600 hover:bg-purple-100 hover:text-purple-700 border border-dashed border-gray-300 hover:border-purple-300 flex items-center gap-1"
+                            title="添加标签"
+                          >
+                            <span>+</span>
+                            <span>添加</span>
+                          </button>
                         </div>
                       </div>
                       
@@ -603,8 +682,8 @@ function App() {
                   <span className="text-sm font-medium text-gray-600 flex items-center">关键词:</span>
                   <input
                     type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
+                    value={tempSearchTerm}
+                    onChange={(e) => setTempSearchTerm(e.target.value)}
                     placeholder="输入关键词"
                     className="flex-1 px-4 py-2 rounded-lg border border-gray-200 focus:border-purple-300 focus:outline-none"
                   />
@@ -615,9 +694,9 @@ function App() {
                   <span className="text-sm font-medium text-gray-600 flex items-center">标签:</span>
                   <div className="flex-1 flex gap-2 flex-wrap">
                     <button
-                      onClick={() => setSelectedTag(null)}
+                      onClick={() => setTempSelectedTag(null)}
                       className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                        selectedTag === null ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        tempSelectedTag === null ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                     >
                       全部
@@ -625,9 +704,9 @@ function App() {
                     {allTags.map((tag) => (
                       <button
                         key={tag}
-                        onClick={() => setSelectedTag(tag)}
+                        onClick={() => setTempSelectedTag(tag)}
                         className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                          selectedTag === tag ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                          tempSelectedTag === tag ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                         }`}
                       >
                         {tag}
@@ -641,25 +720,25 @@ function App() {
                   <span className="text-sm font-medium text-gray-600 flex items-center">状态:</span>
                   <div className="flex gap-2">
                     <button
-                      onClick={() => setStatusFilter('all')}
+                      onClick={() => setTempStatusFilter('all')}
                       className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                        statusFilter === 'all' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        tempStatusFilter === 'all' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                     >
                       全部
                     </button>
                     <button
-                      onClick={() => setStatusFilter('pending')}
+                      onClick={() => setTempStatusFilter('pending')}
                       className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                        statusFilter === 'pending' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        tempStatusFilter === 'pending' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                     >
                       待完成
                     </button>
                     <button
-                      onClick={() => setStatusFilter('completed')}
+                      onClick={() => setTempStatusFilter('completed')}
                       className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                        statusFilter === 'completed' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        tempStatusFilter === 'completed' ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                       }`}
                     >
                       已完成
@@ -670,17 +749,21 @@ function App() {
                 <div className="flex gap-3 justify-end">
                   <button
                     onClick={() => {
-                      setShowSearchModal(false);
-                      setSearchTerm('');
-                      setSelectedTag(null);
-                      setStatusFilter('all');
+                      setTempSearchTerm('');
+                      setTempSelectedTag(null);
+                      setTempStatusFilter('all');
                     }}
                     className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
                   >
                     重置
                   </button>
                   <button
-                    onClick={() => setShowSearchModal(false)}
+                    onClick={() => {
+                      setSearchTerm(tempSearchTerm);
+                      setSelectedTag(tempSelectedTag);
+                      setStatusFilter(tempStatusFilter);
+                      setShowSearchModal(false);
+                    }}
                     className="px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded-lg font-medium transition-colors"
                   >
                     确定
